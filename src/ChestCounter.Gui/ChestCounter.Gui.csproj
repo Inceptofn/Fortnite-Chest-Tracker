@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ChestCounter</AssemblyName>
+    <RootNamespace>ChestCounter.Gui</RootNamespace>
+    <ApplicationIcon>chest.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Keep WinForms off the implicit usings so WPF's Button/Color/ColorConverter stay unambiguous. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="chest.ico" />
+    <Resource Include="chest.png" />
+    <ProjectReference Include="..\ChestCounter.Core\ChestCounter.Core.csproj" />
+    <ProjectReference Include="..\ChestCounter.Ocr\ChestCounter.Ocr.csproj" />
+  </ItemGroup>
+
+</Project>
