@@ -75,75 +75,117 @@ public sealed partial class LiveChestCounter
         }
     }
 
+    // Fortnite shows XP popups at one spot, right of the crosshair: "+600 XP" with a small label
+    // under it (CHEST, KNOCKED, ASSIST...). Capturing just that area, enlarged, is what makes the
+    // small label readable; reading the whole screen misses it most of the time.
+    private static Rectangle PopupArea(Rectangle screen) => new(
+        screen.X + (int)(screen.Width * 0.58), screen.Y + (int)(screen.Height * 0.24),
+        (int)(screen.Width * 0.28), (int)(screen.Height * 0.24));
+
     private async Task CaptureLoop(CancellationToken token)
     {
-        var b = System.Windows.Forms.Screen.PrimaryScreen!.Bounds;
-        int cw = (int)(b.Width * 0.70), ch = (int)(b.Height * 0.55);
-        int cx = b.X + (b.Width - cw) / 2, cy = b.Y + (int)(b.Height * 0.16);
+        var area = PopupArea(System.Windows.Forms.Screen.PrimaryScreen!.Bounds);
 
-        int creditedThisBurst = 0;
+        int credited = 0;      // chests already counted from the popup currently on screen
+        int emptyFrames = 0;
         while (!token.IsCancellationRequested)
         {
             int n = 0;
             try
             {
-                using var bmp = new Bitmap(cw, ch, PixelFormat.Format32bppArgb);
-                using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(cx, cy, 0, 0, new Size(cw, ch));
-                n = await FrameChestCount(bmp);
+                using var shot = new Bitmap(area.Width, area.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(area.X, area.Y, 0, 0, area.Size);
+                n = await ChestsInPopup(shot);
             }
             catch { }
 
-            if (n > creditedThisBurst)
+            if (n > credited)
             {
                 int cur = _liveRaw < 0 ? 0 : _liveRaw;
-                _liveRaw = cur + (n - creditedThisBurst);
-                creditedThisBurst = n;
+                _liveRaw = cur + (n - credited);
+                credited = n;
                 LiveChanged?.Invoke(_liveRaw);
                 Log?.Invoke($"[{DateTime.Now:HH:mm:ss}] CHEST (this match: {_liveRaw})");
             }
-            if (n == 0) creditedThisBurst = 0;
 
-            try { await Task.Delay(300, token); } catch { }
+            // One unreadable frame in the middle of a popup must not make the same chest count twice,
+            // so the popup only counts as gone after a few empty frames in a row.
+            emptyFrames = n == 0 ? emptyFrames + 1 : 0;
+            if (emptyFrames >= 4) credited = 0;
+
+            try { await Task.Delay(120, token); } catch { }
         }
     }
 
-    // "CHEST" as a whole word (so our own overlay's "Chests this match" never counts), with the
-    // "X2" Fortnite appends when popups stack. OCR sometimes reads the S as a 5, the X as a K, or
-    // glues the two together ("CHESTX2").
-    [System.Text.RegularExpressions.GeneratedRegex(@"\bCHE[S5]T(?:\s*[XxKk\u00d7]\s*(\d{1,2}))?(?![A-Za-z])", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
-    private static partial System.Text.RegularExpressions.Regex ChestPopup();
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"\d\s*XP\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
-    private static partial System.Text.RegularExpressions.Regex XpAmount();
+    // A label line that is just "CHEST", optionally with the "X2" Fortnite appends when popups
+    // stack. OCR sometimes reads the S as a 5, the X as a K, or glues the two together.
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\W*CHE[S5]T\W*(?:[XxKk\u00d7]\s*(\d{1,2}))?\W*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex ChestLabel();
 
     private string _lastPopup = "";
 
-    // Chests shown by the XP popups on screen right now: a "+N XP" amount with a CHEST line.
-    private async Task<int> FrameChestCount(Bitmap bmp)
+    // Chests named by the XP popup in this capture of the popup area. The text is white with a
+    // coloured outline, so everything that is not near-white is dropped before reading. Two
+    // passes with different settings: each one misses frames the other gets.
+    private async Task<int> ChestsInPopup(Bitmap area)
     {
-        using var ms = new MemoryStream();
-        bmp.Save(ms, ImageFormat.Png);
-        ms.Position = 0;
-        var dec = await BitmapDecoder.CreateAsync(ms.AsRandomAccessStream());
-        using var sb = await dec.GetSoftwareBitmapAsync();
-        var res = await _engine!.RecognizeAsync(sb);
+        var a = await ReadWhiteText(area, scale: 2, minBrightness: 190);
+        var b = await ReadWhiteText(area, scale: 3, minBrightness: 205);
 
-        var lines = res.Lines.Select(l => l.Text).ToList();
-        int xp = lines.FindIndex(l => XpAmount().IsMatch(l));
-        if (xp < 0) return 0;
-
-        // The popup is the XP line and the label under it.
-        string popup = string.Join(" ", lines.Skip(xp).Take(2));
-        if (popup != _lastPopup)
+        var longest = a.Count >= b.Count ? a : b;
+        // Only report real XP popups; the area also catches kill-feed names and the like.
+        if (longest.Any(l => l.Contains("XP", StringComparison.OrdinalIgnoreCase)))
         {
-            _lastPopup = popup;
-            PopupRead?.Invoke(popup);
+            string popup = string.Join(" / ", longest);
+            if (popup != _lastPopup)
+            {
+                _lastPopup = popup;
+                PopupRead?.Invoke(popup);
+            }
         }
+        return Math.Max(CountChests(a), CountChests(b));
+    }
 
+    private static int CountChests(List<string> lines)
+    {
         int chests = 0;
         foreach (var line in lines)
-            foreach (System.Text.RegularExpressions.Match m in ChestPopup().Matches(line))
-                chests += m.Groups[1].Success && int.TryParse(m.Groups[1].Value, out var times) ? Math.Max(1, times) : 1;
+        {
+            var m = ChestLabel().Match(line);
+            if (!m.Success) continue;
+            chests += m.Groups[1].Success && int.TryParse(m.Groups[1].Value, out var times) ? Math.Max(1, times) : 1;
+        }
         return chests;
+    }
+
+    private async Task<List<string>> ReadWhiteText(Bitmap area, int scale, int minBrightness)
+    {
+        using var big = new Bitmap(area.Width * scale, area.Height * scale, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(big))
+        {
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.DrawImage(area, new Rectangle(0, 0, big.Width, big.Height), new Rectangle(0, 0, area.Width, area.Height), GraphicsUnit.Pixel);
+        }
+
+        // Near-white pixels become black text on a white page.
+        var data = big.LockBits(new Rectangle(0, 0, big.Width, big.Height), ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+        var pixels = new byte[data.Stride * data.Height];
+        System.Runtime.InteropServices.Marshal.Copy(data.Scan0, pixels, 0, pixels.Length);
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            bool white = pixels[i] >= minBrightness && pixels[i + 1] >= minBrightness && pixels[i + 2] >= minBrightness;
+            pixels[i] = pixels[i + 1] = pixels[i + 2] = (byte)(white ? 0 : 255);
+            pixels[i + 3] = 255;
+        }
+        System.Runtime.InteropServices.Marshal.Copy(pixels, 0, data.Scan0, pixels.Length);
+        big.UnlockBits(data);
+
+        using var ms = new MemoryStream();
+        big.Save(ms, ImageFormat.Bmp);
+        ms.Position = 0;
+        var decoder = await BitmapDecoder.CreateAsync(ms.AsRandomAccessStream());
+        using var bitmap = await decoder.GetSoftwareBitmapAsync();
+        var result = await _engine!.RecognizeAsync(bitmap);
+        return result.Lines.Select(l => l.Text.Trim()).Where(t => t.Length > 0).ToList();
     }
 }
