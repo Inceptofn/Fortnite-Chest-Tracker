@@ -45,11 +45,21 @@ public partial class MainWindow : Window
         InitializeComponent();
         _tracker = TrackerConfig.Load();
         _stats = ChestCounterService.LoadStats();
+        _app = AppConfig.Load();
+
+        // Restore the period the player last had selected. The earlier-matches estimate only shows
+        // under "All time", so without this the total looked reset on every launch.
+        switch (_app.Filter)
+        {
+            case 0: F0.IsChecked = true; break;
+            case 1: F1.IsChecked = true; break;
+            case 3: F3.IsChecked = true; break;
+            default: F2.IsChecked = true; break;
+        }
         Render();
 
         _loadingSettings = true;
         _overlay = OverlayConfig.Load();
-        _app = AppConfig.Load();
         AccentBox.Text = _overlay.Accent;
         TitleBox.Text = _overlay.Title;
         InGameOverlayCheck.IsChecked = _app.InGameOverlay;
@@ -729,7 +739,10 @@ public partial class MainWindow : Window
 
     private void Filter_Checked(object sender, RoutedEventArgs e)
     {
-        if (IsLoaded) Render();
+        if (!IsLoaded) return;
+        _app.Filter = FilterIndex();
+        AppConfig.Save(_app);
+        Render();
     }
 
     // Wipes the saved matches so a scan starts from nothing. Overlay and window settings stay.

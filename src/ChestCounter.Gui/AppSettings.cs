@@ -8,6 +8,9 @@ public sealed class AppSettings
 {
     public bool InGameOverlay { get; set; }
     public bool MinimizeToTray { get; set; } = true;
+
+    // Period shown on the main screen: 0 = 24 hours, 1 = 7 days, 2 = Season, 3 = All time.
+    public int Filter { get; set; } = 2;
     public double? OverlayLeft { get; set; }
     public double? OverlayTop { get; set; }
 }
