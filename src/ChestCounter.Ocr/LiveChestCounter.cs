@@ -1,21 +1,107 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Text.RegularExpressions;
 using ChestCounter;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 
 namespace ChestCounter.Ocr;
 
+// Which OCR engine the live counter ended up with.
+//   Available - false when Windows has no OCR language installed at all.
+//   Tag       - language tag of the engine in use, for example "es-MX".
+//   FellBack  - true when the requested language is not installed and another one is used instead.
+public readonly record struct OcrSetup(bool Available, string Tag, bool FellBack);
+
 // Real-time chest counter: screen-captures the center of the screen, OCRs the "+XP CHEST" popup,
 // and reports how many chests you've searched this match. Anticheat-safe (external screen read only).
 // Folds each finished match into the lifetime stats on disk and resets the live count.
-public sealed partial class LiveChestCounter
+public sealed class LiveChestCounter
 {
-    private readonly OcrEngine? _engine = OcrEngine.TryCreateFromUserProfileLanguages();
+    // Both are swapped as one when the language changes; the capture loop reads them every frame.
+    private volatile OcrEngine? _engine;
+    private volatile Regex _chestLabel = BuildChestLabel("en", null);
     private CancellationTokenSource? _cts;
+
+    // `language` is "en" or "es" (anything else = "en"); `customLabel` is an optional extra word to
+    // accept as the chest label (see TrackerSettings.CustomChestLabel).
+    public LiveChestCounter(string? language = null, string? customLabel = null)
+    {
+        Setup = Configure(language, customLabel);
+    }
 
     // False if Windows has no OCR language installed.
     public bool Available => _engine != null;
+
+    // Which OCR engine is in use (see OcrSetup).
+    public OcrSetup Setup { get; private set; }
+
+    // Switch the OCR language and chest label while running. Returns what was actually set up.
+    public OcrSetup Configure(string? language, string? customLabel)
+    {
+        var (engine, setup) = Resolve(language);
+        _engine = engine;
+        _chestLabel = BuildChestLabel(language, customLabel);
+        Setup = setup;
+        return setup;
+    }
+
+    // Change only the chest label (cheap: the OCR engine is left alone). Used while typing a custom label.
+    public void SetChestLabel(string? language, string? customLabel) =>
+        _chestLabel = BuildChestLabel(language, customLabel);
+
+    // What Configure would give for `language`, without touching a running counter.
+    public static OcrSetup Probe(string? language) => Resolve(language).Setup;
+
+    // An OCR engine for "en" / "es", for tools that need one outside the live counter.
+    public static OcrEngine? CreateEngine(string? language) => Resolve(language).Engine;
+
+    // Windows only OCRs in languages that are installed (Settings > Time & language). Looks for the
+    // requested one first (any region: es-MX, es-ES, en-US, ...); if it is not installed, falls back
+    // to the user's profile languages, which is what the counter always used before, and says so.
+    private static (OcrEngine? Engine, OcrSetup Setup) Resolve(string? language)
+    {
+        string wanted = string.Equals(language, "es", StringComparison.OrdinalIgnoreCase) ? "es" : "en";
+        try
+        {
+            var lang = OcrEngine.AvailableRecognizerLanguages
+                .FirstOrDefault(l => l.LanguageTag.StartsWith(wanted, StringComparison.OrdinalIgnoreCase));
+            if (lang != null)
+            {
+                var engine = OcrEngine.TryCreateFromLanguage(lang);
+                if (engine != null) return (engine, new OcrSetup(true, lang.LanguageTag, false));
+            }
+        }
+        catch { }
+
+        try
+        {
+            var engine = OcrEngine.TryCreateFromUserProfileLanguages();
+            if (engine != null) return (engine, new OcrSetup(true, engine.RecognizerLanguage.LanguageTag, true));
+        }
+        catch { }
+
+        return (null, new OcrSetup(false, "", false));
+    }
+
+    // A label line that is just the chest word for the game's language (CHEST in English, COFRE in
+    // Spanish) or the custom label, optionally with the "X2" Fortnite appends when popups stack.
+    // OCR sometimes reads the S as a 5, the O as a 0, the X as a K, or glues the two together.
+    private static Regex BuildChestLabel(string? language, string? customLabel)
+    {
+        var words = new List<string>
+        {
+            string.Equals(language, "es", StringComparison.OrdinalIgnoreCase) ? @"C[O0Q]FRES?" : @"CHE[S5]T",
+        };
+        if (!string.IsNullOrWhiteSpace(customLabel))
+        {
+            var parts = customLabel.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length > 0) words.Add(string.Join(@"\s+", parts.Select(Regex.Escape)));
+        }
+        string alternatives = string.Join("|", words);
+        string pattern = $@"^\W*(?:{alternatives})\W*(?:[XxKk\u00d7]\s*(\d{{1,2}}))?\W*$";
+        return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    }
 
     // Raised when this match's searched-chest count changes (null = between matches).
     public event Action<int?>? LiveChanged;
@@ -117,11 +203,6 @@ public sealed partial class LiveChestCounter
         }
     }
 
-    // A label line that is just "CHEST", optionally with the "X2" Fortnite appends when popups
-    // stack. OCR sometimes reads the S as a 5, the X as a K, or glues the two together.
-    [System.Text.RegularExpressions.GeneratedRegex(@"^\W*CHE[S5]T\W*(?:[XxKk\u00d7]\s*(\d{1,2}))?\W*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
-    private static partial System.Text.RegularExpressions.Regex ChestLabel();
-
     private string _lastPopup = "";
 
     // Chests named by the XP popup in this capture of the popup area. The text is white with a
@@ -146,12 +227,13 @@ public sealed partial class LiveChestCounter
         return Math.Max(CountChests(a), CountChests(b));
     }
 
-    private static int CountChests(List<string> lines)
+    private int CountChests(List<string> lines)
     {
+        var label = _chestLabel;
         int chests = 0;
         foreach (var line in lines)
         {
-            var m = ChestLabel().Match(line);
+            var m = label.Match(line);
             if (!m.Success) continue;
             chests += m.Groups[1].Success && int.TryParse(m.Groups[1].Value, out var times) ? Math.Max(1, times) : 1;
         }
@@ -160,6 +242,9 @@ public sealed partial class LiveChestCounter
 
     private async Task<List<string>> ReadWhiteText(Bitmap area, int scale, int minBrightness)
     {
+        var engine = _engine;   // may be swapped by Configure while we work
+        if (engine == null) return new List<string>();
+
         using var big = new Bitmap(area.Width * scale, area.Height * scale, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(big))
         {
@@ -185,7 +270,7 @@ public sealed partial class LiveChestCounter
         ms.Position = 0;
         var decoder = await BitmapDecoder.CreateAsync(ms.AsRandomAccessStream());
         using var bitmap = await decoder.GetSoftwareBitmapAsync();
-        var result = await _engine!.RecognizeAsync(bitmap);
+        var result = await engine.RecognizeAsync(bitmap);
         return result.Lines.Select(l => l.Text.Trim()).Where(t => t.Length > 0).ToList();
     }
 }

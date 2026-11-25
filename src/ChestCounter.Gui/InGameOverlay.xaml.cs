@@ -30,6 +30,9 @@ public partial class InGameOverlay : Window
         LastText.Text = last?.ToString() ?? "—";
     }
 
+    // Fades the whole card (text included). Same 0.2 - 1.0 range as the OBS overlay.
+    public void SetOpacity(double opacity) => Opacity = OverlaySettings.ClampOpacity(opacity);
+
     public void SetTitle(string title) => TitleText.Text = string.IsNullOrWhiteSpace(title) ? "Chest Tracker" : title;
 
     public void SetAccent(string hex)
