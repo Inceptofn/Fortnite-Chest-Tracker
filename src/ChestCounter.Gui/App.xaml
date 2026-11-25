@@ -27,24 +27,6 @@
             <Setter Property="Foreground" Value="{StaticResource Muted}"/>
             <Setter Property="FontSize" Value="12.5"/>
         </Style>
-        <!-- A player name you can click to open that player's chest stats. Only rows with Link=True react. -->
-        <Style x:Key="PlayerLink" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-            <Setter Property="Foreground" Value="{StaticResource Steel}"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding Link}" Value="True">
-                    <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="ToolTip" Value="View this player's chest stats"/>
-                </DataTrigger>
-                <MultiDataTrigger>
-                    <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding Link}" Value="True"/>
-                        <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True"/>
-                    </MultiDataTrigger.Conditions>
-                    <Setter Property="Foreground" Value="{StaticResource Text}"/>
-                    <Setter Property="TextDecorations" Value="Underline"/>
-                </MultiDataTrigger>
-            </Style.Triggers>
-        </Style>
         <Style x:Key="Figure" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource Display}"/>
             <Setter Property="Foreground" Value="{StaticResource Text}"/>
@@ -132,51 +114,6 @@
                                 <Setter Property="Foreground" Value="{StaticResource Text}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Slider: a thin track filled in bone up to a round thumb. -->
-        <Style TargetType="{x:Type Slider}">
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Slider}">
-                        <Grid Height="22" Background="Transparent">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource Stroke}" VerticalAlignment="Center"/>
-                            <Track x:Name="PART_Track">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
-                                        <RepeatButton.Template>
-                                            <ControlTemplate TargetType="{x:Type RepeatButton}">
-                                                <Grid Background="Transparent">
-                                                    <Border Height="4" CornerRadius="2" Background="{StaticResource Text}" VerticalAlignment="Center"/>
-                                                </Grid>
-                                            </ControlTemplate>
-                                        </RepeatButton.Template>
-                                    </RepeatButton>
-                                </Track.DecreaseRepeatButton>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
-                                        <RepeatButton.Template>
-                                            <ControlTemplate TargetType="{x:Type RepeatButton}">
-                                                <Grid Background="Transparent"/>
-                                            </ControlTemplate>
-                                        </RepeatButton.Template>
-                                    </RepeatButton>
-                                </Track.IncreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Focusable="False">
-                                        <Thumb.Template>
-                                            <ControlTemplate TargetType="{x:Type Thumb}">
-                                                <Ellipse Width="14" Height="14" Fill="{StaticResource Text}"/>
-                                            </ControlTemplate>
-                                        </Thumb.Template>
-                                    </Thumb>
-                                </Track.Thumb>
-                            </Track>
-                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

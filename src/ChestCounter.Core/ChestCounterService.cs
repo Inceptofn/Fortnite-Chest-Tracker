@@ -17,16 +17,13 @@ public static class ChestCounterService
     public const string Domain = "chesttracker.app";
 
     // Compact stats as JSON for the stream overlay; `live` = this-match count from OCR.
-    // `manualTotalMatches` is the match total the player entered; it drives `estimated`, the chests
-    // guessed for earlier matches that no replay covers (0 when it is not set).
-    public static string OverlayJson(LifetimeStats s, int? live = null, int manualTotalMatches = 0)
+    public static string OverlayJson(LifetimeStats s, int? live = null)
     {
         var all = s.Over(null);
         var recs = s.Records.OrderBy(r => r.Time).ToList();
         int best = recs.Count > 0 ? recs.Max(r => r.You) : 0;
         int? last = recs.Count > 0 ? recs[^1].You : null;
-        var estimated = s.EstimatePast(manualTotalMatches).Chests;
-        var dto = new { live, avg = all.AvgYou, total = all.YourChests, estimated, matches = all.Matches, best, last, domain = Domain };
+        var dto = new { live, avg = all.AvgYou, total = all.YourChests, matches = all.Matches, best, last, domain = Domain };
         return System.Text.Json.JsonSerializer.Serialize(dto);
     }
 

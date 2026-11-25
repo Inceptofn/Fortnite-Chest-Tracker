@@ -135,7 +135,6 @@ public sealed class OverlayServer
       const c = await (await fetch('/config.json?'+Date.now())).json();
       if(c.accent) document.documentElement.style.setProperty('--accent', c.accent);
       if(c.title)  document.getElementById('title').textContent = c.title;
-      if(c.opacity!=null) document.querySelector('.card').style.opacity = c.opacity;
       document.getElementById('wm').textContent = c.domain || '';
     }catch(e){}
   }

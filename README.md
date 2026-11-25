@@ -30,13 +30,6 @@ Built for Chapter 7, the Treasure Hunters season. Site: [chesttracker.app](https
 - **Odds and Treasure Hours.** Epic's per-chest odds for every treasure, this week's items, your
   chance of having hit each one by now, and a countdown to the next Treasure Hour. While one is
   live the table switches to the boosted rates.
-- **Player stats.** Click a teammate's name (in *Squad, last game* or *Most played with*) to open
-  their chests per match, with the same bar chart, best/last game, average, a game-by-game list and
-  the treasures that came out of their chests.
-- **Earlier matches.** Type your total matches and press **Update counter** to apply the estimate to
-  the main screen and the overlay (typing alone only previews it).
-- **Adaptive window.** The layout follows the window size: sidebar beside the dashboard when wide,
-  one scrolling column when narrow, with the stats, squad panels and chart adjusting to fit.
 
 ## Only Battle Royale counts
 
@@ -52,8 +45,7 @@ and skipped — the scan report tells you how many were left out.
   `%LOCALAPPDATA%\FortniteGame\Saved\Demos`. Fortnite keeps about 100 recent replays and rotates the
   oldest out every few hours, so run the app regularly to catch matches before they roll off.
 - An OCR language in Windows (Settings → Time & Language → Language) for the live counter. English is
-  installed by default. For Spanish, add it there and keep **Optical character recognition** ticked
-  in its language options. The live counter can only read a language Windows has installed.
+  installed by default.
 
 ## Run it
 
@@ -70,9 +62,7 @@ To add the overlay to OBS or Streamlabs, add a **Browser Source** pointing at `h
 (around 320×150, transparent background). It shows the live count during a match and your lifetime
 average between matches; the exact per-match total from the replay reconciles it after each game.
 
-Lifetime stats are saved to `%APPDATA%\ChestCounter\stats.json`. Settings are in `overlay.json`
-(title, colour, opacity), `app.json` (window and in-game overlay) and `tracker.json` (OCR language,
-chest label and your match total), all in the same folder.
+Lifetime stats are saved to `%APPDATA%\ChestCounter\stats.json`.
 
 ## Settings
 
@@ -86,30 +76,6 @@ In the overlay panel:
 - **Minimize to tray** — minimizing hides the window to the system tray instead of the taskbar.
   Double-click the tray icon to bring it back.
 - **Accent color** and **title** apply to both the in-game overlay and the browser source.
-- **Opacity** — a slider from 20% to 100% that fades the whole overlay, text included. It applies
-  to the in-game overlay at once and to the OBS browser source within a couple of seconds.
-- **Start with Windows** — adds a per-user entry (no admin rights) that opens the app with Windows,
-  hidden in the tray. Untick it to remove the entry. If you move the exe, it re-points itself to the
-  new location the next time you run it.
-
-In the **Live counter language** panel:
-
-- **English / Español** — the language Fortnite is set to. It picks the Windows OCR language and the
-  word the counter looks for under the XP popup (CHEST in English, COFRE in Spanish). It applies
-  immediately; a match in progress keeps its count. If that OCR language is not installed in Windows
-  the counter falls back to your profile language and the panel says so.
-- **Chest label (optional)** — the exact word your game shows under the XP, for when the built-in
-  word is not what your client displays. The status bar shows the last popup the OCR read, which is
-  the quickest way to find out what to type.
-
-In the **Earlier matches** panel:
-
-- **Total matches** — how many Battle Royale matches you have played in total. The replays only go
-  back about 100 matches, so the rest are estimated as
-  `(your total − matches read from replays) × your average chests per match`. The result is added to
-  the **Opened** figure when the **All time** filter is selected (it shows "incl. ~N est."), and the
-  panel breaks it down. Matches read from replays are never changed. As more replays are read the
-  estimate shrinks, since fewer matches are left uncovered.
 
 ## How it works
 

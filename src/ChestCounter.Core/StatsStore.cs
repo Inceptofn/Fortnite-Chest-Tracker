@@ -21,19 +21,8 @@ public sealed class MatchRecord
 // A teammate's totals across the matches you played together.
 public readonly record struct MateTotal(string Name, int Matches, long Chests);
 
-// One match played with a given teammate: when, their chests (a minimum), and your own count.
-public readonly record struct PlayerGame(DateTime Time, int Chests, int You);
-
 // A time-window aggregate.
 public readonly record struct Period(int Matches, long YourChests, double AvgYou);
-
-// Chests estimated for matches the replays do not cover: the matches you say you have played
-// beyond the ones read from replays, times your average chests per match.
-//   Counted - matches read from replays
-//   Missing - manual total minus Counted (never negative)
-//   Avg     - your average chests per replay-read match
-//   Chests  - Missing * Avg, rounded
-public readonly record struct PastEstimate(int Counted, int Missing, double Avg, long Chests);
 
 // Per-match history, persisted to disk and only ever appended to.
 public sealed class LifetimeStats
@@ -79,29 +68,6 @@ public sealed class LifetimeStats
             .Select(g => new MateTotal(g.Key, g.Count(), g.Sum(m => (long)m.Chests)))
             .OrderByDescending(t => t.Matches).ThenByDescending(t => t.Chests)
             .Take(take).ToList();
-
-    // Every match you played with `name` on/after `since` (null = all time), oldest-first.
-    public List<PlayerGame> GamesWith(string name, DateTime? since)
-    {
-        var games = new List<PlayerGame>();
-        foreach (var r in Records.Where(r => since is not { } s || r.Time >= s).OrderBy(r => r.Time))
-        {
-            var mate = r.Mates.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.Ordinal));
-            if (mate != null) games.Add(new PlayerGame(r.Time, mate.Chests, r.You));
-        }
-        return games;
-    }
-
-    // Estimate the chests from earlier matches that no replay covers, given the total number of
-    // matches the player says they have played. Returns zeros when no total was entered or there
-    // are no replay-read matches yet to take an average from.
-    public PastEstimate EstimatePast(int manualTotalMatches)
-    {
-        int counted = Records.Count;
-        int missing = Math.Max(0, manualTotalMatches - counted);
-        double avg = AvgYou;
-        return new PastEstimate(counted, missing, avg, (long)Math.Round(missing * avg));
-    }
 
     // Matches on/after `since` (null = all time), oldest-first by time.
     public List<MatchRecord> RecordsSince(DateTime? since) =>
